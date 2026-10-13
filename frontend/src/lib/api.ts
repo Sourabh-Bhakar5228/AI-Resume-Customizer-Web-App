@@ -1,6 +1,10 @@
 import { CustomizeResumeResponse, HealthResponse, CoverLetterResponse } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname !== "localhost"
+    ? "https://ai-resume-customizer-web-app.onrender.com"
+    : "http://localhost:8000");
 
 export async function checkBackendHealth(): Promise<HealthResponse> {
   try {

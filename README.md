@@ -5,9 +5,10 @@ An intelligent full-stack web application designed to help job seekers tailor an
 ---
 
 ## 🚀 Live Demo & Repository
-- **Frontend App URL**: *(To be updated upon deployment, e.g., `https://resume-customizer.vercel.app`)*
-- **Backend API URL**: *(To be updated upon deployment, e.g., `https://resume-customizer-api.onrender.com`)*
-- **GitHub Repository**: *(Link to repository)*
+- **Frontend App URL**: [https://frontend-ten-wheat-49.vercel.app](https://frontend-ten-wheat-49.vercel.app/)
+- **Backend API URL**: [https://ai-resume-customizer-web-app.onrender.com](https://ai-resume-customizer-web-app.onrender.com)
+- **API Health Check**: [https://ai-resume-customizer-web-app.onrender.com/api/health](https://ai-resume-customizer-web-app.onrender.com/api/health)
+- **GitHub Repository**: [https://github.com/Sourabh-Bhakar5228/AI-Resume-Customizer-Web-App](https://github.com/Sourabh-Bhakar5228/AI-Resume-Customizer-Web-App)
 
 ---
 
