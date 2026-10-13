@@ -1,0 +1,29 @@
+Alex Morgan
+alex.morgan@email.com | (555) 234-5678 | San Francisco, CA | linkedin.com/in/alexmorgan | github.com/alexmorgan
+
+PROFESSIONAL SUMMARY
+Full Stack Software Engineer with 4 years of experience building web applications, backend APIs, and distributed systems. Passionate about clean code, scalable architecture, and developer productivity.
+
+TECHNICAL SKILLS
+- Languages: TypeScript, JavaScript, Python, SQL, HTML5, CSS3
+- Frontend: React, Next.js, Tailwind CSS, Redux, Webpack
+- Backend: Python, FastAPI, Node.js, Express, PostgreSQL, Redis
+- DevOps & Tools: Docker, Git, GitHub Actions, AWS (S3, EC2), RESTful APIs, Agile/Scrum
+
+PROFESSIONAL EXPERIENCE
+
+Full Stack Developer | CloudScale Solutions (2022 - Present) | San Francisco, CA
+- Developed and maintained customer-facing web applications using Next.js, React, and TypeScript.
+- Built RESTful APIs with Python FastAPI and PostgreSQL, serving 50,000+ daily active users.
+- Improved database query performance by 40% through index optimization and Redis caching.
+- Collaborated with product managers and designers in bi-weekly Agile sprints to deliver product features.
+- Containerized microservices using Docker and automated CI/CD deployments via GitHub Actions.
+
+Software Engineer | NextGen Apps (2020 - 2022) | San Jose, CA
+- Built internal analytics dashboards using React, Node.js, and MongoDB.
+- Created automated unit and integration tests, increasing overall code test coverage to 85%.
+- Resolved high-priority production bugs and optimized API response times.
+
+EDUCATION
+Bachelor of Science in Computer Science
+University of California, Davis (2016 - 2020)
