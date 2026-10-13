@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List
 from fastapi import HTTPException
 from app.config import settings
 from app.models.schemas import CustomizeResumeResponse, SkillCategorization, ExperienceItem, DiffHighlight
+from app.services.parser import extract_candidate_header
 
 logger = logging.getLogger("llm_service")
 
@@ -14,7 +15,7 @@ Your goal is to tailor the candidate's existing resume to strongly align with th
 
 ### Instructions:
 1. **Analyze the JD**: Identify primary required skills, frameworks, tools, soft skills, and core responsibilities.
-2. **Analyze the Candidate Resume**: Identify candidate's background, past roles, strengths, and existing experience.
+2. **Analyze Candidate Contact & Header**: Extract the candidate's real full name and exact contact line (email, phone, location, LinkedIn, GitHub, portfolio URL) verbatim from their resume text. NEVER replace with placeholder emails like contact@example.com or fake numbers.
 3. **Rewrite Profile Summary**: Create a punchy, high-impact 3-4 sentence professional summary that immediately highlights qualifications relevant to this JD.
 4. **Categorize Skills**:
    - `matched_skills`: Skills from candidate's resume that directly match the JD requirements.
@@ -32,13 +33,13 @@ Your goal is to tailor the candidate's existing resume to strongly align with th
 7. **Diff Highlights**:
    - Provide 3-5 concrete examples of changes made (Original vs Tailored with the rationale).
 8. **Formatted Markdown**:
-   - Synthesize the entire tailored resume into clean, professionally structured Markdown with standard headers (`# Name`, `## Summary`, `## Skills`, `## Experience`, `## Education`, etc.).
+   - Synthesize the entire tailored resume into clean, professionally structured Markdown with standard headers (`# Name`, `email | phone | location | links`, `## Summary`, `## Skills`, `## Experience`, `## Education`, etc.). Use candidate's REAL name and contact details in the markdown header!
 
 ### STRICT OUTPUT FORMAT:
 You MUST respond with a single valid JSON object strictly matching this JSON schema:
 {
-  "candidate_name": "string or null",
-  "candidate_contact": "string or null",
+  "candidate_name": "Full name of candidate from resume",
+  "candidate_contact": "Full real contact line: email | phone | location | linkedin | github",
   "original_summary": "string or null",
   "tailored_summary": "string",
   "skills": {
@@ -90,15 +91,13 @@ def clean_json_response(raw_text: str) -> str:
 
 def get_demo_fallback_response(resume_text: str, jd_text: str) -> CustomizeResumeResponse:
     """Provides high-quality realistic response if LLM keys are not configured or exceed quota."""
-    # Extract some simple heuristic words
-    lines = [l.strip() for l in resume_text.split("\n") if l.strip()]
-    candidate_name = lines[0] if lines else "Candidate Name"
-    if len(candidate_name) > 40:
-        candidate_name = "Professional Candidate"
+    header = extract_candidate_header(resume_text)
+    candidate_name = header.get("candidate_name") or "Candidate Name"
+    candidate_contact = header.get("formatted_contact") or "candidate@email.com"
 
     return CustomizeResumeResponse(
         candidate_name=candidate_name,
-        candidate_contact="contact@example.com | (555) 019-2834 | linkedin.com/in/profile | github.com/profile",
+        candidate_contact=candidate_contact,
         original_summary="Experienced professional looking for new challenges.",
         tailored_summary=f"Results-driven and innovative professional with hands-on expertise aligned with core requirements of this role. Demonstrated track record in delivering scalable solutions, cross-functional collaboration, and applying best practices to achieve key organizational objectives.",
         skills=SkillCategorization(
@@ -165,7 +164,7 @@ def get_demo_fallback_response(resume_text: str, jd_text: str) -> CustomizeResum
             )
         ],
         full_tailored_markdown=f"""# {candidate_name}
-contact@example.com | (555) 019-2834 | linkedin.com/in/profile | github.com/profile
+{candidate_contact}
 
 ## Professional Summary
 Results-driven and innovative professional with hands-on expertise aligned with core requirements of this role. Demonstrated track record in delivering scalable solutions, cross-functional collaboration, and applying best practices to achieve key organizational objectives.
@@ -200,12 +199,16 @@ async def call_gemini(prompt: str) -> str:
     if not settings.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not configured.")
         
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+    genai.configure(api_key=settings.GEMINI_API_KEY.strip())
     model = genai.GenerativeModel(
         model_name=settings.GEMINI_MODEL,
         generation_config={"response_mime_type": "application/json"}
     )
-    response = model.generate_content(prompt)
+    response = await model.generate_content_async(prompt)
+    if not response.text:
+        if response.candidates and response.candidates[0].content.parts:
+            return response.candidates[0].content.parts[0].text
+        raise ValueError("Empty response from Gemini")
     return response.text
 
 async def call_groq(prompt: str) -> str:
@@ -214,7 +217,7 @@ async def call_groq(prompt: str) -> str:
     if not settings.GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY is not configured.")
         
-    client = Groq(api_key=settings.GROQ_API_KEY)
+    client = Groq(api_key=settings.GROQ_API_KEY.strip())
     completion = client.chat.completions.create(
         model=settings.GROQ_MODEL,
         messages=[
@@ -275,6 +278,30 @@ async def customize_resume_with_llm(
         cleaned = clean_json_response(llm_raw_output)
         data = json.loads(cleaned)
         data["raw_original_text"] = resume_text
+
+        # Enrich and sanitize candidate header
+        header = extract_candidate_header(resume_text)
+
+        contact_val = (data.get("candidate_contact") or "").strip()
+        if not contact_val or "example.com" in contact_val.lower() or "(555) 019" in contact_val:
+            if header.get("formatted_contact"):
+                data["candidate_contact"] = header["formatted_contact"]
+
+        name_val = (data.get("candidate_name") or "").strip()
+        if not name_val or name_val.lower() in ["candidate name", "professional candidate", "name", "candidate"]:
+            if header.get("candidate_name"):
+                data["candidate_name"] = header["candidate_name"]
+
+        # Clean any placeholder text in full_tailored_markdown
+        markdown_text = data.get("full_tailored_markdown") or ""
+        if "contact@example.com" in markdown_text:
+            real_contact = data.get("candidate_contact") or header.get("formatted_contact") or ""
+            data["full_tailored_markdown"] = re.sub(
+                r'contact@example\.com[^\n]*',
+                real_contact,
+                markdown_text
+            )
+
         return CustomizeResumeResponse(**data)
     except Exception as e:
         logger.error(f"Failed to parse LLM JSON output: {e}\nRaw was: {llm_raw_output[:300]}")

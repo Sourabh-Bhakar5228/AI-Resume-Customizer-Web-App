@@ -7,12 +7,107 @@ def clean_text(text: str) -> str:
     """Normalize extracted text whitespace and linebreaks."""
     if not text:
         return ""
-    # Replace multiple empty lines with maximum 2
+    # Replace non-breaking and special spaces with standard space
+    text = text.replace('\xa0', ' ').replace('\u200b', '').replace('\u202f', ' ')
+    # Replace carriage returns and excessive newlines
     text = re.sub(r'\r\n', '\n', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     # Remove null or strange non-printable characters
     text = "".join(char for char in text if char.isprintable() or char in "\n\t\r")
     return text.strip()
+
+def extract_candidate_header(text: str) -> dict:
+    """
+    Extracts candidate name, email, phone, LinkedIn, GitHub, location,
+    and a formatted contact line directly from raw resume text.
+    """
+    if not text:
+        return {
+            "candidate_name": "Candidate",
+            "email": "",
+            "phone": "",
+            "linkedin": "",
+            "github": "",
+            "formatted_contact": ""
+        }
+
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+    # Extract emails
+    emails = re.findall(r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+\b', text)
+    email = emails[0].strip() if emails else ""
+
+    # Extract phone numbers
+    phone_pattern = r'(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}'
+    phones = [p.strip() for p in re.findall(phone_pattern, text) if len(re.sub(r'\D', '', p)) >= 10]
+    phone = phones[0] if phones else ""
+
+    # Extract LinkedIn
+    linkedin_matches = re.findall(r'(?:https?://)?(?:www\.)?(linkedin\.com/(?:in/)?[\w-]+)', text, re.IGNORECASE)
+    linkedin = linkedin_matches[0] if linkedin_matches else ""
+    if linkedin and not linkedin.startswith("http"):
+        linkedin = f"linkedin.com/{linkedin.split('linkedin.com/')[-1]}"
+
+    # Extract GitHub
+    github_matches = re.findall(r'(?:https?://)?(?:www\.)?(github\.com/[\w-]+)', text, re.IGNORECASE)
+    github = github_matches[0] if github_matches else ""
+    if github and not github.startswith("http"):
+        github = f"github.com/{github.split('github.com/')[-1]}"
+
+    # Candidate Name heuristic
+    candidate_name = ""
+    header_blacklist = {"resume", "curriculum", "vitae", "cv", "profile", "summary", "contact", "experience", "education", "skills"}
+    for line in lines[:5]:
+        cleaned_line = re.sub(r'[^a-zA-Z\s]', '', line).strip()
+        words = cleaned_line.split()
+        if 1 <= len(words) <= 4 and "@" not in line and not re.search(r'\d', line):
+            if not any(w.lower() in header_blacklist for w in words):
+                candidate_name = line
+                break
+
+    if not candidate_name and lines:
+        candidate_name = lines[0] if len(lines[0]) < 40 else "Candidate Name"
+
+    # Assemble contact elements
+    contact_parts = []
+    if email:
+        contact_parts.append(email)
+    if phone:
+        contact_parts.append(phone)
+
+    # Search for City, State / Country location in the top 5 lines
+    for line in lines[:5]:
+        loc_match = re.search(r'([A-Za-z\s]+,\s*[A-Z]{2}(?:\s*\d{5})?|[A-Za-z\s]+,\s*[A-Za-z]+)', line)
+        if loc_match:
+            cand_loc = loc_match.group(1).strip()
+            if cand_loc != candidate_name and "@" not in cand_loc and "linkedin" not in cand_loc.lower() and "github" not in cand_loc.lower():
+                if cand_loc not in contact_parts:
+                    contact_parts.append(cand_loc)
+            break
+
+    if linkedin and linkedin not in contact_parts:
+        contact_parts.append(linkedin)
+    if github and github not in contact_parts:
+        contact_parts.append(github)
+
+    # Fallback to literal 2nd line if it has typical contact separator '|'
+    if not contact_parts and len(lines) > 1:
+        second_line = lines[1]
+        if any(c in second_line for c in ["@", "|", ".com", "(", "+"]):
+            formatted_contact = second_line
+        else:
+            formatted_contact = ""
+    else:
+        formatted_contact = " | ".join(contact_parts)
+
+    return {
+        "candidate_name": candidate_name,
+        "email": email,
+        "phone": phone,
+        "linkedin": linkedin,
+        "github": github,
+        "formatted_contact": formatted_contact
+    }
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extract text from PDF using pdfplumber with fallback to pypdf."""
@@ -23,7 +118,10 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         import pdfplumber
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             for page in pdf.pages:
-                page_text = page.extract_text()
+                # Extract text with tolerance for tighter column/line formatting
+                page_text = page.extract_text(x_tolerance=2, y_tolerance=2)
+                if not page_text:
+                    page_text = page.extract_text()
                 if page_text:
                     extracted_text.append(page_text)
         if extracted_text:
